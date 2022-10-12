@@ -7,6 +7,11 @@
 
 using namespace Provisor;
 
+System::Void MainForm::RefreshCoins()
+{
+
+}
+
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
 	srand(time(0));

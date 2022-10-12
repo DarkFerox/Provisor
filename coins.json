@@ -4,6 +4,16 @@
       "name": "PancakeSwap Token",
       "symbol": "Cake",
       "contract": "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82"
+    },
+    {
+      "name": "Star Wars Cat",
+      "symbol": "SWCAT",
+      "contract": "0x98b6E33e77A55732f0e2ce595429144b18cE862C"
+    },
+    {
+      "name": "Gold Nugget",
+      "symbol": "NGT",
+      "contract": "0x370527c29113aaD172D1dEF6c42d0C924DF124cE"
     }
   ]
 }
