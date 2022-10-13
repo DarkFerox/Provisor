@@ -7,14 +7,9 @@
 
 using namespace Provisor;
 
-System::Void MainForm::RefreshCoins()
-{
-
-}
-
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
-	srand(time(0));
+	srand((unsigned int)time(0));
 	setlocale(LC_ALL, "rus");
 	Application::EnableVisualStyles();
 	Application::SetCompatibleTextRenderingDefault(false);

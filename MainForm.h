@@ -105,7 +105,7 @@ namespace Provisor {
 			// ch_currentPrice
 			// 
 			this->ch_currentPrice->Text = L"Current Price";
-			this->ch_currentPrice->Width = 138;
+			this->ch_currentPrice->Width = 140;
 			// 
 			// ch_priceChange
 			// 
@@ -115,6 +115,7 @@ namespace Provisor {
 			// ch_buyPrice
 			// 
 			this->ch_buyPrice->Text = L"Buy price";
+			this->ch_buyPrice->Width = 163;
 			// 
 			// ch_profit
 			// 
@@ -137,15 +138,29 @@ namespace Provisor {
 		}
 #pragma endregion
 
-	public: System::Void RefreshCoins();
+	public: System::Void RefreshCoins()
+	{
+		this->listViewCoins->Items->Clear();
+		for each (auto coin in coinBase->GetCoins())
+		{
+			System::Windows::Forms::ListViewItem^ listViewItem = gcnew Windows::Forms::ListViewItem(coin->first->symbol);
+			if (coin->second->Count != 0)
+			{
+				listViewItem->SubItems->Add(System::Convert::ToString(coin->second[0]));
+				listViewItem->SubItems->Add(System::Convert::ToString(coin->second[0] - coin->second[coin->second->Count - 1]));
+			}
+			this->listViewCoins->Items->Add(listViewItem);
+		}		
+	}
 
-	private: System::Void MainForm_Load(System::Object^ sender, System::EventArgs^ e) {
-
+	private: System::Void MainForm_Load(System::Object^ sender, System::EventArgs^ e)
+	{
+		RefreshCoins();
 	}
 	
-	private: System::Void buttonAddCoin_Click(System::Object^ sender, System::EventArgs^ e) {
+	private: System::Void buttonAddCoin_Click(System::Object^ sender, System::EventArgs^ e)
+	{
 		
-	}
-	
-	};
+	}	
+};
 }
