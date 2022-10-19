@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cliext/map>
+#include <cliext/queue>
 #include <Windows.h>
 #include <string>
 #include <fstream>
@@ -9,6 +10,7 @@
 #include <exception>
 #include <msclr\marshal.h>
 #include <msclr/marshal_cppstd.h>
+#include "Client.h"
 
 #include "boost/property_tree/ptree.hpp"
 #include "boost/property_tree/json_parser.hpp"
@@ -31,10 +33,12 @@ std::string SysStringToString(System::String^ from)
 
 ref struct Coin
 {
-	System::String^ name = "";
-	System::String^ symbol = "";
-	System::String^ contract = "";
-
+	System::String^ name;
+	System::String^ symbol;
+	System::String^ contract;
+	cliext::queue<System::UInt32> time;
+	cliext::queue<System::Double> price;
+	
 	bool operator <(const Coin^ other)
 	{
 		return this->name < other->name;
@@ -43,7 +47,7 @@ ref struct Coin
 
 ref class CoinBase
 {
-	typedef cliext::map<Coin^, System::Collections::Generic::List<int>^> coinsMap;
+	typedef cliext::map<System::String^, Coin^> coinsMap;
 private:
 	coinsMap^ coins;
 
@@ -63,9 +67,15 @@ public:
 		return coins;
 	}
 
+	bool ContractIsValid(System::String^ contract)
+	{
+		if (contract->Length < 42) return false;
+		if (contract[0] != '0' && contract[1] != 'x') return false;
+		return true;
+	}
+
 	void LoadCoins()
 	{
-		using boost::property_tree::ptree;
 		std::ifstream inputFile{ "coins.json" };
 		try
 		{
@@ -75,7 +85,7 @@ public:
 		{
 			std::cerr << ex.what();
 		}
-		ptree jsonTree;
+		boost::property_tree::ptree jsonTree;
 		read_json(inputFile, jsonTree);
 		for (auto child : jsonTree.get_child("coins"))
 		{
@@ -83,24 +93,52 @@ public:
 			coin->name = StringToSysString(child.second.get<std::string>("name"));
 			coin->symbol = StringToSysString(child.second.get<std::string>("symbol"));
 			coin->contract = StringToSysString(child.second.get<std::string>("contract"));
-			if (coins->count(coin) == 0) coins[coin] = gcnew System::Collections::Generic::List<int>;			
+			if (coins->count(coin->name) == 0) coins[coin->name] = coin;			
 		}
 	}
 
 	void SaveCoins()
 	{
-		using boost::property_tree::ptree;
-		ptree toJson;
-		ptree ptCoins;
+		boost::property_tree::ptree toJson;
+		boost::property_tree::ptree ptCoins;
 		for each (auto coin in coins)
 		{
-			ptree ptCoin;
-			ptCoin.put("name", SysStringToString(coin->first->name));
-			ptCoin.put("symbol", SysStringToString(coin->first->symbol));
-			ptCoin.put("contract", SysStringToString(coin->first->contract));
+			boost::property_tree::ptree ptCoin;
+			ptCoin.put("name", SysStringToString(coin->second->name));
+			ptCoin.put("symbol", SysStringToString(coin->second->symbol));
+			ptCoin.put("contract", SysStringToString(coin->second->contract));
 			ptCoins.push_back(std::make_pair("", ptCoin));
 		}
 		toJson.add_child("coins", ptCoins);
 		write_json("coins.json", toJson);
+	}
+
+	std::string GetResponseByContract(System::String^ contract)
+	{
+		std::string response = GetResponse(SysStringToString(contract));
+		return response;
+	}
+
+	boost::property_tree::ptree JsonToPtree(std::string& json)
+	{
+		std::stringstream fromJson(json);
+		boost::property_tree::ptree response;
+		boost::property_tree::read_json(fromJson, response);
+		return response;
+	}
+
+	void ResponseToCoin(boost::property_tree::ptree& response)
+	{
+		Coin^ coin = coins[StringToSysString(response.get_child("data").get<std::string>("name"))];
+		coin->time.push(response.get<System::UInt32>("updated_at"));
+		coin->price.push(response.get<System::Double>("price_BNB"));
+		const System::UInt32 HOUR = 3600;
+		System::UInt32 period = coin->time.back() - coin->time.front();
+		while (period > HOUR)
+		{
+			coin->time.pop();
+			coin->price.pop();
+			period = coin->time.back() - coin->time.front();
+		}
 	}
 };

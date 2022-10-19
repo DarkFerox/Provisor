@@ -46,6 +46,9 @@ namespace Provisor {
 	private: System::Windows::Forms::ColumnHeader^ ch_priceChange;
 	private: System::Windows::Forms::ColumnHeader^ ch_buyPrice;
 	private: System::Windows::Forms::ColumnHeader^ ch_profit;
+	private: System::Windows::Forms::Label^ uncorrectContractLabel;
+	private: System::Windows::Forms::Label^ testLabel;
+
 
 	private:
 		
@@ -63,6 +66,8 @@ namespace Provisor {
 			this->ch_priceChange = (gcnew System::Windows::Forms::ColumnHeader());
 			this->ch_buyPrice = (gcnew System::Windows::Forms::ColumnHeader());
 			this->ch_profit = (gcnew System::Windows::Forms::ColumnHeader());
+			this->uncorrectContractLabel = (gcnew System::Windows::Forms::Label());
+			this->testLabel = (gcnew System::Windows::Forms::Label());
 			this->SuspendLayout();
 			// 
 			// buttonAddCoin
@@ -90,7 +95,7 @@ namespace Provisor {
 					this->ch_priceChange, this->ch_buyPrice, this->ch_profit
 			});
 			this->listViewCoins->HideSelection = false;
-			this->listViewCoins->Location = System::Drawing::Point(105, 52);
+			this->listViewCoins->Location = System::Drawing::Point(105, 58);
 			this->listViewCoins->MultiSelect = false;
 			this->listViewCoins->Name = L"listViewCoins";
 			this->listViewCoins->Size = System::Drawing::Size(515, 300);
@@ -121,11 +126,33 @@ namespace Provisor {
 			// 
 			this->ch_profit->Text = L"Profit";
 			// 
+			// uncorrectContractLabel
+			// 
+			this->uncorrectContractLabel->AutoSize = true;
+			this->uncorrectContractLabel->ForeColor = System::Drawing::Color::Red;
+			this->uncorrectContractLabel->Location = System::Drawing::Point(102, 38);
+			this->uncorrectContractLabel->Name = L"uncorrectContractLabel";
+			this->uncorrectContractLabel->Size = System::Drawing::Size(0, 13);
+			this->uncorrectContractLabel->TabIndex = 3;
+			// 
+			// testLabel
+			// 
+			this->testLabel->AutoSize = true;
+			this->testLabel->Location = System::Drawing::Point(105, 365);
+			this->testLabel->MaximumSize = System::Drawing::Size(500, 100);
+			this->testLabel->MinimumSize = System::Drawing::Size(500, 100);
+			this->testLabel->Name = L"testLabel";
+			this->testLabel->Size = System::Drawing::Size(500, 100);
+			this->testLabel->TabIndex = 4;
+			this->testLabel->Text = L"TestLabel";
+			// 
 			// MainForm
 			// 
 			this->AutoScaleDimensions = System::Drawing::SizeF(6, 13);
 			this->AutoScaleMode = System::Windows::Forms::AutoScaleMode::Font;
 			this->ClientSize = System::Drawing::Size(632, 509);
+			this->Controls->Add(this->testLabel);
+			this->Controls->Add(this->uncorrectContractLabel);
 			this->Controls->Add(this->listViewCoins);
 			this->Controls->Add(this->smartContractTextBox);
 			this->Controls->Add(this->buttonAddCoin);
@@ -143,11 +170,11 @@ namespace Provisor {
 		this->listViewCoins->Items->Clear();
 		for each (auto coin in coinBase->GetCoins())
 		{
-			System::Windows::Forms::ListViewItem^ listViewItem = gcnew Windows::Forms::ListViewItem(coin->first->symbol);
-			if (coin->second->Count != 0)
+			System::Windows::Forms::ListViewItem^ listViewItem = gcnew Windows::Forms::ListViewItem(coin->second->symbol);
+			if (!coin->second->price.empty())
 			{
-				listViewItem->SubItems->Add(System::Convert::ToString(coin->second[0]));
-				listViewItem->SubItems->Add(System::Convert::ToString(coin->second[0] - coin->second[coin->second->Count - 1]));
+				listViewItem->SubItems->Add(System::Convert::ToString(coin->second->price.back()));
+				listViewItem->SubItems->Add(System::Convert::ToString(coin->second->price.front() - coin->second->price.back()));
 			}
 			this->listViewCoins->Items->Add(listViewItem);
 		}		
@@ -157,10 +184,44 @@ namespace Provisor {
 	{
 		RefreshCoins();
 	}
+
+	private: System::String^ CheckResponse(std::string response)
+	{
+		if (response.find("error") == std::string::npos) return L"OK";
+		boost::property_tree::ptree tree;
+		std::stringstream stream(response);
+		boost::property_tree::read_json(stream, tree);
+		boost::property_tree::ptree root = tree.get_child("error");
+		return StringToSysString(root.get<std::string>("message"));
+	}
 	
 	private: System::Void buttonAddCoin_Click(System::Object^ sender, System::EventArgs^ e)
 	{
-		
-	}	
+		if (!coinBase->ContractIsValid(smartContractTextBox->Text))
+		{
+			uncorrectContractLabel->Text = L"Uncorrect smart-contract";
+			uncorrectContractLabel->ForeColor = System::Drawing::Color::Red;
+			return;
+		}
+		std::string response = coinBase->GetResponseByContract(smartContractTextBox->Text);
+		testLabel->Text = StringToSysString(response);
+		if (CheckResponse(response) != "OK") return;
+		testLabel->Text += L"\n" + CheckResponse(response);
+		auto responsePt = coinBase->JsonToPtree(response);
+		if (coinBase->GetCoins()->count(StringToSysString(responsePt.get_child("data").get<std::string>("name"))) != 0)
+		{
+			uncorrectContractLabel->Text = L"This smart-contract already added";
+			uncorrectContractLabel->ForeColor = System::Drawing::Color::Red;
+			return;
+		}
+		Coin^ coin = gcnew Coin;
+		coin->name = StringToSysString(responsePt.get_child("data").get<std::string>("name"));
+		coin->symbol = StringToSysString(responsePt.get_child("data").get<std::string>("symbol"));
+		coin->contract = smartContractTextBox->Text;
+		coinBase->GetCoins()[coin->name] = coin;
+		uncorrectContractLabel->Text = L"Coin added to database";
+		uncorrectContractLabel->ForeColor = System::Drawing::Color::Green;
+		RefreshCoins();
+	}
 };
 }
