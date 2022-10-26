@@ -48,6 +48,8 @@ namespace Provisor {
 	private: System::Windows::Forms::ColumnHeader^ ch_profit;
 	private: System::Windows::Forms::Label^ uncorrectContractLabel;
 	private: System::Windows::Forms::Label^ testLabel;
+	private: System::ComponentModel::BackgroundWorker^ backgroundWorkerRefresh;
+	private: System::Windows::Forms::Button^ button1;
 
 
 	private:
@@ -68,6 +70,8 @@ namespace Provisor {
 			this->ch_profit = (gcnew System::Windows::Forms::ColumnHeader());
 			this->uncorrectContractLabel = (gcnew System::Windows::Forms::Label());
 			this->testLabel = (gcnew System::Windows::Forms::Label());
+			this->backgroundWorkerRefresh = (gcnew System::ComponentModel::BackgroundWorker());
+			this->button1 = (gcnew System::Windows::Forms::Button());
 			this->SuspendLayout();
 			// 
 			// buttonAddCoin
@@ -146,11 +150,26 @@ namespace Provisor {
 			this->testLabel->TabIndex = 4;
 			this->testLabel->Text = L"TestLabel";
 			// 
+			// backgroundWorkerRefresh
+			// 
+			this->backgroundWorkerRefresh->DoWork += gcnew System::ComponentModel::DoWorkEventHandler(this, &MainForm::backgroundWorkerRefresh_DoWork);
+			// 
+			// button1
+			// 
+			this->button1->Location = System::Drawing::Point(12, 42);
+			this->button1->Name = L"button1";
+			this->button1->Size = System::Drawing::Size(75, 23);
+			this->button1->TabIndex = 5;
+			this->button1->Text = L"Refresh";
+			this->button1->UseVisualStyleBackColor = true;
+			this->button1->Click += gcnew System::EventHandler(this, &MainForm::button1_Click);
+			// 
 			// MainForm
 			// 
 			this->AutoScaleDimensions = System::Drawing::SizeF(6, 13);
 			this->AutoScaleMode = System::Windows::Forms::AutoScaleMode::Font;
 			this->ClientSize = System::Drawing::Size(632, 509);
+			this->Controls->Add(this->button1);
 			this->Controls->Add(this->testLabel);
 			this->Controls->Add(this->uncorrectContractLabel);
 			this->Controls->Add(this->listViewCoins);
@@ -163,9 +182,9 @@ namespace Provisor {
 			this->PerformLayout();
 
 		}
-#pragma endregion
+#pragma endregion	
 
-	public: System::Void RefreshCoins()
+	public: System::Void RefreshCoinsInForm()
 	{
 		this->listViewCoins->Items->Clear();
 		for each (auto coin in coinBase->GetCoins())
@@ -173,16 +192,22 @@ namespace Provisor {
 			System::Windows::Forms::ListViewItem^ listViewItem = gcnew Windows::Forms::ListViewItem(coin->second->symbol);
 			if (!coin->second->price.empty())
 			{
-				listViewItem->SubItems->Add(System::Convert::ToString(coin->second->price.back()));
-				listViewItem->SubItems->Add(System::Convert::ToString(coin->second->price.front() - coin->second->price.back()));
+				listViewItem->SubItems->Add(System::Convert::ToString(System::Decimal(coin->second->price.back())));
+				System::Double priceChange = 
+					(coin->second->price.front() - coin->second->price.back()) / (coin->second->price.back() / 100);
+				listViewItem->SubItems->Add(System::Convert::ToString(System::Decimal(round(priceChange))) + " %");
 			}
 			this->listViewCoins->Items->Add(listViewItem);
-		}		
+		}
+		if (!coinBase->GetCoins()["Star Wars Cat"]->price.empty())
+			testLabel->Text = System::Convert::ToString(coinBase->GetCoins()["BUSD Token"]->price.back())
+			+ L"\n" + testLabel->Text;
 	}
 
 	private: System::Void MainForm_Load(System::Object^ sender, System::EventArgs^ e)
 	{
-		RefreshCoins();
+		RefreshCoinsInForm();
+		backgroundWorkerRefresh->RunWorkerAsync();
 	}
 
 	private: System::String^ CheckResponse(std::string response)
@@ -203,9 +228,17 @@ namespace Provisor {
 			uncorrectContractLabel->ForeColor = System::Drawing::Color::Red;
 			return;
 		}
+
 		std::string response = coinBase->GetResponseByContract(smartContractTextBox->Text);
 		testLabel->Text = StringToSysString(response);
-		if (CheckResponse(response) != "OK") return;
+
+		if (CheckResponse(response) != "OK")
+		{
+			uncorrectContractLabel->Text = L"Problems whith response from server";
+			uncorrectContractLabel->ForeColor = System::Drawing::Color::Red;
+			testLabel->Text = CheckResponse(response);
+			return;
+		}
 		testLabel->Text += L"\n" + CheckResponse(response);
 		auto responsePt = coinBase->JsonToPtree(response);
 		if (coinBase->GetCoins()->count(StringToSysString(responsePt.get_child("data").get<std::string>("name"))) != 0)
@@ -214,6 +247,7 @@ namespace Provisor {
 			uncorrectContractLabel->ForeColor = System::Drawing::Color::Red;
 			return;
 		}
+
 		Coin^ coin = gcnew Coin;
 		coin->name = StringToSysString(responsePt.get_child("data").get<std::string>("name"));
 		coin->symbol = StringToSysString(responsePt.get_child("data").get<std::string>("symbol"));
@@ -221,7 +255,23 @@ namespace Provisor {
 		coinBase->GetCoins()[coin->name] = coin;
 		uncorrectContractLabel->Text = L"Coin added to database";
 		uncorrectContractLabel->ForeColor = System::Drawing::Color::Green;
-		RefreshCoins();
+		RefreshCoinsInForm();
+	}
+
+	private: delegate void dRefresher();
+
+	private: System::Void backgroundWorkerRefresh_DoWork(System::Object^ sender, System::ComponentModel::DoWorkEventArgs^ e)
+	{
+		while (true)
+		{
+			coinBase->RefreshCoinsFromResponse();
+			Invoke(gcnew dRefresher(this, &MainForm::RefreshCoinsInForm));
+			Sleep(5000);
+		}
+	}
+	private: System::Void button1_Click(System::Object^ sender, System::EventArgs^ e)
+	{
+		coinBase->SaveCoins();
 	}
 };
 }

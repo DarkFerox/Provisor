@@ -36,13 +36,28 @@ ref struct Coin
 	System::String^ name;
 	System::String^ symbol;
 	System::String^ contract;
-	cliext::queue<System::UInt32> time;
+	cliext::queue<System::Double> time;
 	cliext::queue<System::Double> price;
 	
 	bool operator <(const Coin^ other)
 	{
 		return this->name < other->name;
 	}
+
+	void ResponseToCoin(boost::property_tree::ptree& response)
+	{
+		time.push(response.get<System::Double>("updated_at"));
+		price.push(response.get_child("data").get<System::Double>("price_BNB"));
+		const int HOUR = 3600;
+		System::Double period = time.back() - time.front();
+		while (period > HOUR)
+		{
+			time.pop();
+			price.pop();
+			period = time.back() - time.front();
+		}
+	}
+
 };
 
 ref class CoinBase
@@ -72,6 +87,11 @@ public:
 		if (contract->Length < 42) return false;
 		if (contract[0] != '0' && contract[1] != 'x') return false;
 		return true;
+	}
+
+	bool CheckResponse(std::string response)
+	{
+		return response.find("error") == std::string::npos;
 	}
 
 	void LoadCoins()
@@ -124,21 +144,24 @@ public:
 		std::stringstream fromJson(json);
 		boost::property_tree::ptree response;
 		boost::property_tree::read_json(fromJson, response);
+		if (!CheckResponse(json)) throw std::logic_error(response.get_child("error").get<std::string>("message"));
 		return response;
 	}
 
-	void ResponseToCoin(boost::property_tree::ptree& response)
+	void RefreshCoinsFromResponse()
 	{
-		Coin^ coin = coins[StringToSysString(response.get_child("data").get<std::string>("name"))];
-		coin->time.push(response.get<System::UInt32>("updated_at"));
-		coin->price.push(response.get<System::Double>("price_BNB"));
-		const System::UInt32 HOUR = 3600;
-		System::UInt32 period = coin->time.back() - coin->time.front();
-		while (period > HOUR)
+		for each (auto coin in coins)
 		{
-			coin->time.pop();
-			coin->price.pop();
-			period = coin->time.back() - coin->time.front();
+			try
+			{
+				std::string response = GetResponseByContract(coin->second->contract);
+				auto responsePt = JsonToPtree(response);
+				coin->second->ResponseToCoin(responsePt);
+			}
+			catch (std::exception& ex)
+			{
+				std::cerr << ex.what();
+			}
 		}
 	}
 };
